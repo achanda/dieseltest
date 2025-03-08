@@ -6,6 +6,7 @@ use axum::{
 };
 use diesel::prelude::*;
 use diesel::r2d2::{self, ConnectionManager};
+use diesel::QueryableByName;
 use std::{env, net::SocketAddr, sync::Arc, time::Duration};
 use tower_http::cors::{Any, CorsLayer};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
@@ -140,15 +141,29 @@ async fn main() {
 
 // Function to test database connection with a simple SELECT 1 query
 fn test_database_connection(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
-    tracing::info!("Acquiring connection from pool for SELECT 1 test...");
+    tracing::info!("Acquiring connection from pool for prepared statement test...");
     let mut conn = pool.get()?;
-    tracing::info!("Connection acquired, executing SELECT 1...");
+    tracing::info!("Connection acquired, executing prepared SELECT 1...");
     
-    // Execute a simple SELECT 1 query to test the connection
-    diesel::sql_query("SELECT 1 as result")
-        .execute(&mut conn)?;
+    // Define a struct to hold the result
+    #[derive(QueryableByName, Debug)]
+    struct TestResult {
+        #[diesel(sql_type = diesel::sql_types::Integer)]
+        result: i32,
+    }
     
-    tracing::info!("SELECT 1 query executed successfully");
+    // Execute a prepared statement query instead of a direct SQL query
+    // This will test if prepared statements work with PgBouncer
+    let results = diesel::sql_query("SELECT $1 as result")
+        .bind::<diesel::sql_types::Integer, _>(1)
+        .load::<TestResult>(&mut conn)?;
+    
+    if let Some(result) = results.first() {
+        tracing::info!("Prepared statement executed successfully, result: {}", result.result);
+    } else {
+        tracing::warn!("Prepared statement executed but returned no results");
+    }
+    
     Ok(())
 }
 
