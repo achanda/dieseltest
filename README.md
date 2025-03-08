@@ -15,7 +15,7 @@ curl -X POST http://localhost:3000/users \
 Sample error
 
 ```
-ieseltest-postgres-1   | 2025-03-08 04:42:24.273 UTC [1] LOG:  starting PostgreSQL 15.12 (Debian 15.12-1.pgdg120+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14) 12.2.0, 64-bit
+dieseltest-postgres-1   | 2025-03-08 04:42:24.273 UTC [1] LOG:  starting PostgreSQL 15.12 (Debian 15.12-1.pgdg120+1) on aarch64-unknown-linux-gnu, compiled by gcc (Debian 12.2.0-14) 12.2.0, 64-bit
 dieseltest-postgres-1   | 2025-03-08 04:42:24.274 UTC [1] LOG:  listening on IPv4 address "0.0.0.0", port 5432
 dieseltest-postgres-1   | 2025-03-08 04:42:24.274 UTC [1] LOG:  listening on IPv6 address "::", port 5432
 dieseltest-postgres-1   | 2025-03-08 04:42:24.275 UTC [1] LOG:  listening on Unix socket "/var/run/postgresql/.s.PGSQL.5432"
