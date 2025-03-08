@@ -32,22 +32,33 @@ async fn main() {
 
     // Get the database URL from the environment
     let database_url = env::var("DATABASE_URL")
-        .expect("DATABASE_URL must be set");
+        .unwrap_or_else(|_| {
+            tracing::error!("DATABASE_URL environment variable not set");
+            "postgres://db_user:db_password@pgbouncer:6432/demo_db".to_string()
+        });
 
     // Configure connection manager with proper settings for PgBouncer
     let manager = ConnectionManager::<PgConnection>::new(database_url);
     
     // Create connection pool with PgBouncer-compatible settings
-    let pool = r2d2::Pool::builder()
+    let pool = match r2d2::Pool::builder()
         .connection_timeout(Duration::from_secs(3))
         .max_size(10) // Increase max connections for API
         .min_idle(Some(1)) // Keep at least one connection ready
         .idle_timeout(Some(Duration::from_secs(10))) // Release connections after 10 seconds idle
-        .build(manager)
-        .expect("Failed to create connection pool");
+        .build(manager) {
+            Ok(pool) => pool,
+            Err(e) => {
+                tracing::error!("Failed to create connection pool: {}", e);
+                std::process::exit(1);
+            }
+        };
     
-    // Create some fake users at startup
-    create_fake_users(&pool).expect("Failed to create fake users");
+    // Create some fake users at startup - handle errors gracefully
+    if let Err(e) = create_fake_users(&pool) {
+        tracing::error!("Failed to create fake users: {}", e);
+        // Continue running the server even if fake user creation fails
+    }
     
     // Create a shared state that holds the database pool
     let state = Arc::new(pool);
@@ -70,32 +81,60 @@ async fn main() {
     let addr = SocketAddr::from(([0, 0, 0, 0], 3000));
     tracing::info!("Starting server on {}", addr);
     
-    // Create a TCP listener
-    let listener = TcpListener::bind(addr).await.unwrap();
-    tracing::info!("Listening on {}", addr);
+    // Create a TCP listener with error handling
+    let listener = match TcpListener::bind(addr).await {
+        Ok(listener) => {
+            tracing::info!("Listening on {}", addr);
+            listener
+        },
+        Err(e) => {
+            tracing::error!("Failed to bind to {}: {}", addr, e);
+            std::process::exit(1);
+        }
+    };
     
     // Run the server with axum's serve method
-    axum::serve(listener, app).await.unwrap();
+    if let Err(e) = axum::serve(listener, app).await {
+        tracing::error!("Server error: {}", e);
+    }
 }
 
 // Create initial fake users
 fn create_fake_users(pool: &DbPool) -> Result<(), diesel::result::Error> {
-    let mut conn = pool.get().expect("Failed to get a connection");
+    let mut conn = match pool.get() {
+        Ok(conn) => conn,
+        Err(e) => {
+            tracing::error!("Failed to get a connection from pool: {}", e);
+            return Ok(()); // Return Ok to prevent server from stopping
+        }
+    };
     
     // Generate 10 fake users
     let fake_users = NewUser::generate_fake_batch(10);
     
-    // Insert users in batches
+    // Insert users in batches with error handling for each batch
     for user_batch in fake_users.chunks(5) {
-        diesel::insert_into(users)
+        match diesel::insert_into(users)
             .values(user_batch)
-            .execute(&mut conn)?;
+            .execute(&mut conn) {
+                Ok(_) => {},
+                Err(e) => {
+                    tracing::error!("Failed to insert user batch: {}", e);
+                    // Continue with next batch instead of returning error
+                    continue;
+                }
+            };
     }
     
     // Log the created users
-    let results = users.load::<User>(&mut conn)?;
-    
-    tracing::info!("Created {} fake users", results.len());
+    match users.load::<User>(&mut conn) {
+        Ok(results) => {
+            tracing::info!("Created {} fake users", results.len());
+        },
+        Err(e) => {
+            tracing::error!("Failed to load users after creation: {}", e);
+        }
+    }
     
     Ok(())
 }
@@ -104,11 +143,14 @@ fn create_fake_users(pool: &DbPool) -> Result<(), diesel::result::Error> {
 async fn get_users(State(pool): State<AppState>) -> Result<Json<Vec<User>>, StatusCode> {
     let conn = &mut pool
         .get()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to get database connection: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     
     let result = users.load::<User>(conn)
         .map_err(|e| {
-            eprintln!("Database error: {:?}", e);
+            tracing::error!("Database error when loading users: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     
@@ -122,13 +164,16 @@ async fn create_user(
 ) -> Result<Json<User>, StatusCode> {
     let conn = &mut pool
         .get()
-        .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        .map_err(|e| {
+            tracing::error!("Failed to get database connection: {}", e);
+            StatusCode::INTERNAL_SERVER_ERROR
+        })?;
     
     let result = diesel::insert_into(users)
         .values(&new_user)
         .get_result::<User>(conn)
         .map_err(|e| {
-            eprintln!("Database error: {:?}", e);
+            tracing::error!("Database error when creating user: {}", e);
             StatusCode::INTERNAL_SERVER_ERROR
         })?;
     
