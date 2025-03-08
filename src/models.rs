@@ -1,6 +1,6 @@
 use diesel::prelude::*;
 use crate::schema::users;
-use chrono::{DateTime, Utc, NaiveDateTime};
+use chrono::{DateTime, Utc};
 use serde::{Serialize, Deserialize};
 use fake::Fake;
 use fake::faker::name::en::{FirstName, LastName};
