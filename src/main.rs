@@ -72,11 +72,11 @@ async fn main() {
             }
         };
     
-    // Test database connection
-    tracing::info!("Testing database connection...");
-    match pool.get() {
-        Ok(_) => tracing::info!("Successfully connected to database"),
-        Err(e) => tracing::warn!("Could not establish initial database connection: {}", e),
+    // Test database connection with a simple SELECT 1 query
+    tracing::info!("Testing database connection with SELECT 1 query...");
+    match test_database_connection(&pool) {
+        Ok(_) => tracing::info!("Database connection test successful (SELECT 1)"),
+        Err(e) => tracing::warn!("Database connection test failed: {}", e),
     }
     
     // Create some fake users at startup - handle errors gracefully
@@ -136,6 +136,20 @@ async fn main() {
     } else {
         tracing::info!("Server has stopped gracefully");
     }
+}
+
+// Function to test database connection with a simple SELECT 1 query
+fn test_database_connection(pool: &DbPool) -> Result<(), Box<dyn std::error::Error>> {
+    tracing::info!("Acquiring connection from pool for SELECT 1 test...");
+    let mut conn = pool.get()?;
+    tracing::info!("Connection acquired, executing SELECT 1...");
+    
+    // Execute a simple SELECT 1 query to test the connection
+    diesel::sql_query("SELECT 1 as result")
+        .execute(&mut conn)?;
+    
+    tracing::info!("SELECT 1 query executed successfully");
+    Ok(())
 }
 
 // Create initial fake users
