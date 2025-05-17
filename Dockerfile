@@ -1,4 +1,4 @@
-FROM rust:1.82 as builder
+FROM rust:1.87 as builder
 
 WORKDIR /usr/src/app
 COPY . .
@@ -10,7 +10,7 @@ RUN cargo install diesel_cli@2.1.1 --no-default-features --features postgres --l
 RUN cargo build --release
 
 # Use the same Rust image for runtime to avoid glibc compatibility issues
-FROM rust:1.82-slim
+FROM rust:1.87-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq5 \
